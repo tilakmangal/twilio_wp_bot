@@ -37,7 +37,7 @@ class WhatsAppController {
         String from = params.get("From");
         String body = params.get("Body");
 
-        String reply = getGptReply(body);
+        String reply = getGeminiReply(body);
 
         Message.creator(
                 new PhoneNumber(from),
@@ -48,32 +48,37 @@ class WhatsAppController {
         return ResponseEntity.ok("ok");
     }
 
-    private String getGptReply(String message) throws IOException {
-        MediaType JSON = MediaType.parse("application/json");
-
+    private String getGeminiReply(String userPrompt) throws IOException {
+        OkHttpClient client = new OkHttpClient();
+    
+        String geminiApiKey = "YOUR_GEMINI_API_KEY";
+        String geminiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=" + geminiApiKey;
+    
         String requestJson = """
         {
-          "model": "gpt-4",
-          "messages": [
-            {"role": "user", "content": "%s"}
-          ]
+          "contents": [{
+            "parts": [{
+              "text": "%s"
+            }]
+          }]
         }
-        """.formatted(message);
-
+        """.formatted(userPrompt.replace("\"", "\\\""));
+    
         Request request = new Request.Builder()
-                .url(OPENAI_URL)
-                .addHeader("Authorization", "Bearer " + OPENAI_API_KEY)
+                .url(geminiUrl)
                 .addHeader("Content-Type", "application/json")
-                .post(RequestBody.create(requestJson, JSON))
+                .post(RequestBody.create(requestJson, MediaType.parse("application/json")))
                 .build();
-
+    
         try (Response response = client.newCall(request).execute()) {
-            if (!response.isSuccessful()) return "GPT Error";
+            if (!response.isSuccessful()) return "Gemini Error: " + response.message();
+    
             String json = response.body().string();
-
             ObjectMapper mapper = new ObjectMapper();
             Map<?, ?> map = mapper.readValue(json, Map.class);
-            return (String) ((Map<?, ?>)((Map<?, ?>)((java.util.List<?>) map.get("choices")).get(0)).get("message")).get("content");
+    
+            return (String) ((Map<?, ?>)((Map<?, ?>)((java.util.List<?>) map.get("candidates")).get(0)).get("content")).get("parts").get(0).toString().replace("text=", "");
         }
     }
+
 }
